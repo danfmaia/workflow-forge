@@ -9,10 +9,15 @@ including workflow execution and self-reflection capabilities.
 import asyncio
 import json
 import uuid
+import logging
 from datetime import datetime
 
 from app.workflow.orchestrator import WorkflowOrchestrator
 from app.database import init_db, get_db
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 async def run_demo():
@@ -80,7 +85,7 @@ async def run_demo():
                 workflow_name,
                 workflow_description,
                 result.get("status", "unknown"),
-                str(result.get("data", {}))
+                str(result.get("result", {}))
             )
         )
 
@@ -103,7 +108,7 @@ async def run_demo():
     print("-" * 80)
     print(f"Status: {result.get('status', 'unknown')}")
     print("\nResult Data:")
-    result_data = result.get("data", result.get("result", {}))
+    result_data = result.get("result", {})
     print(json.dumps(result_data, indent=2))
     print("\nExecution History:")
     for step in result.get("history", []):

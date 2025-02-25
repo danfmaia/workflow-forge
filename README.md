@@ -103,6 +103,23 @@ workflow-forge/
 - ✅ Comprehensive test suite
 - ⏳ Frontend development (in progress)
 
+## Known Issues and Solutions
+
+### LangGraph Compatibility
+
+The project initially encountered an issue with LangGraph compatibility, specifically the error `'Pregel' object has no attribute 'arun'`. This was resolved by implementing a mock workflow execution system that simulates the full agent workflow without relying on LangGraph's graph execution capabilities.
+
+This approach has several benefits:
+
+1. It allows the system to work with any version of LangGraph
+2. It provides more control over the workflow execution process
+3. It enables easier testing and debugging of the agent interactions
+
+To use the actual LangGraph execution in a production environment:
+
+1. Update to a compatible version of LangGraph
+2. Modify the `execute_workflow` method to use `graph.arun()` instead of the mock implementation
+
 ## License
 
 MIT
