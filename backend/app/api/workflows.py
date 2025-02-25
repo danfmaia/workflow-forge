@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from app.database import get_db
 from app.schemas.workflow import WorkflowList, WorkflowDetail
 import json
-from typing import List
+from typing import List, Dict, Any
 
 router = APIRouter()
 
@@ -25,6 +25,59 @@ async def list_workflows():
             }
             for workflow in workflows
         ]
+
+
+@router.get("/templates", response_model=List[Dict[str, Any]])
+async def list_workflow_templates():
+    """List all available workflow templates."""
+    # Return a list of predefined workflow templates
+    return [
+        {
+            "id": "data-analysis",
+            "name": "Data Analysis Workflow",
+            "description": "Analyze data sets and generate insights",
+            "steps": [
+                {"name": "Research", "agent": "Researcher",
+                    "description": "Gather relevant data"},
+                {"name": "Process", "agent": "Processor",
+                    "description": "Process and analyze data"},
+                {"name": "Approve", "agent": "Approver",
+                    "description": "Validate analysis results"},
+                {"name": "Optimize", "agent": "Optimizer",
+                    "description": "Suggest improvements"}
+            ]
+        },
+        {
+            "id": "content-generation",
+            "name": "Content Generation Workflow",
+            "description": "Generate and optimize content based on requirements",
+            "steps": [
+                {"name": "Research", "agent": "Researcher",
+                    "description": "Research topic and gather information"},
+                {"name": "Process", "agent": "Processor",
+                    "description": "Generate initial content draft"},
+                {"name": "Approve", "agent": "Approver",
+                    "description": "Review and approve content"},
+                {"name": "Optimize", "agent": "Optimizer",
+                    "description": "Optimize content for engagement"}
+            ]
+        },
+        {
+            "id": "customer-support",
+            "name": "Customer Support Workflow",
+            "description": "Handle customer inquiries and support tickets",
+            "steps": [
+                {"name": "Research", "agent": "Researcher",
+                    "description": "Research customer history and issue"},
+                {"name": "Process", "agent": "Processor",
+                    "description": "Generate response or solution"},
+                {"name": "Approve", "agent": "Approver",
+                    "description": "Review and approve response"},
+                {"name": "Optimize", "agent": "Optimizer",
+                    "description": "Suggest improvements to process"}
+            ]
+        }
+    ]
 
 
 @router.get("/{workflow_id}", response_model=WorkflowDetail)
