@@ -1,9 +1,9 @@
 from typing import Dict, Any
-from .base import BaseAgent
+from .base import Agent
 from langchain_core.messages import HumanMessage, AIMessage
 
 
-class ResearcherAgent(BaseAgent):
+class ResearcherAgent(Agent):
     """Agent responsible for gathering information and research."""
 
     def __init__(self):

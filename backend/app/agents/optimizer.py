@@ -1,9 +1,9 @@
 from typing import Dict, Any
-from .base import BaseAgent
+from .base import Agent
 from langchain_core.messages import HumanMessage, AIMessage
 
 
-class OptimizerAgent(BaseAgent):
+class OptimizerAgent(Agent):
     """Agent responsible for workflow optimization through self-reflection."""
 
     def __init__(self):

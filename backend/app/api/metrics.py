@@ -1,56 +1,61 @@
-from fastapi import APIRouter
+"""API endpoints for system metrics."""
+
+from fastapi import APIRouter, HTTPException
+from app.database import get_db
+import psutil
+from datetime import datetime
+import logging
 from typing import Dict, Any
-from app.database import db
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/")
-async def get_metrics() -> Dict[str, Any]:
-    """Get overall system metrics."""
-    # Get workflow statistics
-    total_workflows = await db.fetch_val(
-        "SELECT COUNT(*) FROM workflows"
-    )
-    successful_workflows = await db.fetch_val(
-        "SELECT COUNT(*) FROM workflows WHERE status = 'completed'"
-    )
-    failed_workflows = await db.fetch_val(
-        "SELECT COUNT(*) FROM workflows WHERE status = 'error'"
-    )
+async def get_metrics():
+    """Get system metrics and workflow statistics."""
+    try:
+        async with get_db() as db:
+            # Get workflow execution metrics
+            total_executions = await db.fetch_val(
+                "SELECT COUNT(*) FROM workflows"
+            ) or 0
 
-    # Calculate success rate
-    success_rate = (successful_workflows / total_workflows *
-                    100) if total_workflows > 0 else 0
+            # Get completed workflows
+            completed = await db.fetch_val(
+                "SELECT COUNT(*) FROM workflows WHERE status = 'completed'"
+            ) or 0
 
-    # Get recent workflows
-    recent_workflows = await db.fetch_all(
-        """
-        SELECT id, name, status, created_at 
-        FROM workflows 
-        ORDER BY created_at DESC 
-        LIMIT 5
-        """
-    )
+            # Get failed workflows
+            failed = await db.fetch_val(
+                "SELECT COUNT(*) FROM workflows WHERE status = 'error'"
+            ) or 0
 
-    return {
-        "workflow_metrics": {
-            "total": total_workflows,
-            "successful": successful_workflows,
-            "failed": failed_workflows,
-            "success_rate": round(success_rate, 2)
-        },
-        "performance_metrics": {
-            "average_execution_time": "1.5s",  # TODO: Implement actual timing
-            "agent_utilization": {
-                "researcher": 85,
-                "processor": 90,
-                "approver": 75,
-                "optimizer": 60
+            # Get system metrics
+            memory = psutil.virtual_memory()
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            disk = psutil.disk_usage('/')
+
+            return {
+                "workflow_metrics": {
+                    "total_executions": total_executions,
+                    "completed": completed,
+                    "failed": failed,
+                    "success_rate": (completed / total_executions * 100) if total_executions > 0 else 0
+                },
+                "system_metrics": {
+                    "memory_usage_percent": memory.percent,
+                    "cpu_usage_percent": cpu_percent,
+                    "disk_usage_percent": disk.percent,
+                    "timestamp": datetime.now().isoformat()
+                }
             }
-        },
-        "recent_workflows": [dict(w) for w in recent_workflows] if recent_workflows else []
-    }
+    except Exception as e:
+        logger.error(f"Error retrieving metrics: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve metrics: {str(e)}"
+        )
 
 
 @router.get("/agents")

@@ -1,9 +1,9 @@
 from typing import Dict, Any
-from .base import BaseAgent
+from .base import Agent
 from langchain_core.messages import HumanMessage, AIMessage
 
 
-class ProcessorAgent(BaseAgent):
+class ProcessorAgent(Agent):
     """Agent responsible for executing workflow processing tasks."""
 
     def __init__(self):

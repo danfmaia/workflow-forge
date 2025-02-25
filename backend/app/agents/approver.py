@@ -1,9 +1,9 @@
 from typing import Dict, Any
-from .base import BaseAgent
+from .base import Agent
 from langchain_core.messages import HumanMessage, AIMessage
 
 
-class ApproverAgent(BaseAgent):
+class ApproverAgent(Agent):
     """Agent responsible for validating and approving workflow results."""
 
     def __init__(self):
