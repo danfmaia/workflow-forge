@@ -14,9 +14,13 @@ from datetime import datetime
 
 from app.workflow.orchestrator import WorkflowOrchestrator
 from app.database import init_db, get_db
+from app.config import config
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=getattr(logging, config.logging.level),
+    format=config.logging.format
+)
 logger = logging.getLogger(__name__)
 
 
@@ -25,6 +29,7 @@ async def run_demo():
     print("\n" + "=" * 80)
     print("WorkflowForge Demonstration".center(80))
     print("=" * 80 + "\n")
+    print(f"Environment: {config.environment}\n")
 
     # Initialize the database
     print("Initializing database...")
@@ -33,8 +38,9 @@ async def run_demo():
 
     # Create workflow orchestrator
     print("Creating workflow orchestrator...")
-    orchestrator = WorkflowOrchestrator()
-    print("Workflow orchestrator created.\n")
+    orchestrator = WorkflowOrchestrator(use_mock=config.workflow.use_mock)
+    print(
+        f"Workflow orchestrator created (using {'mock' if orchestrator.use_mock else 'LangGraph'} execution).\n")
 
     # Define a sample workflow
     workflow_id = str(uuid.uuid4())
@@ -85,7 +91,7 @@ async def run_demo():
                 workflow_name,
                 workflow_description,
                 result.get("status", "unknown"),
-                str(result.get("result", {}))
+                json.dumps(result.get("result", {}))
             )
         )
 
@@ -109,7 +115,11 @@ async def run_demo():
     print(f"Status: {result.get('status', 'unknown')}")
     print("\nResult Data:")
     result_data = result.get("result", {})
-    print(json.dumps(result_data, indent=2))
+    if result_data:
+        print(json.dumps(result_data, indent=2))
+    else:
+        print("No result data available")
+
     print("\nExecution History:")
     for step in result.get("history", []):
         print(f"- {step}")
@@ -136,10 +146,14 @@ async def run_demo():
     }
 
     print("Running optimization analysis...")
-    optimization_result = await optimizer.process(optimization_input)
+    try:
+        optimization_result = await optimizer.process(optimization_input)
+        print("\nOptimization Suggestions:")
+        print(json.dumps(optimization_result, indent=2))
+    except Exception as e:
+        logger.error(f"Error during optimization: {str(e)}")
+        print(f"\nOptimization failed: {str(e)}")
 
-    print("\nOptimization Suggestions:")
-    print(json.dumps(optimization_result, indent=2))
     print("-" * 80 + "\n")
 
     print("Demonstration complete!")
