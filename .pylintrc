@@ -1,0 +1,10 @@
+[MESSAGES CONTROL]
+# Add directories or file patterns to ignore during linting
+ignore=
+
+# Disable specific messages
+disable=
+    C0114, # missing-module-docstring
+    C0115, # missing-class-docstring
+    C0116, # missing-function-docstring
+    W0718  # catch-all-exception
