@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: workflow-forge-backend
+    restart: unless-stopped
+    ports:
+      - '8000:8000'
+    environment:
+      - ENVIRONMENT=production
+      - USE_MOCK_WORKFLOW=true
+      - DATABASE_URL=data/workflows.db
+      - LOG_LEVEL=INFO
+      - SECRET_KEY=${SECRET_KEY:-supersecretkey}
+      - CONDA_DEFAULT_ENV=workflow-forge
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/logs:/app/logs
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'conda',
+          'run',
+          '-n',
+          'workflow-forge',
+          'curl',
+          '-f',
+          'http://localhost:8000/health',
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Uncomment when frontend is ready
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: workflow-forge-frontend
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - REACT_APP_API_URL=http://backend:8000
+  #   depends_on:
+  #     - backend
+
+networks:
+  default:
+    name: workflow-forge-network
