@@ -1,67 +1,81 @@
-from fastapi import APIRouter, HTTPException, Depends
-from typing import List, Optional
-from pydantic import BaseModel
-from app.database import Database, db
+"""API endpoints for workflow management."""
+
+from fastapi import APIRouter, HTTPException
+from app.database import get_db
+from app.schemas.workflow import WorkflowList, WorkflowDetail
+import json
+from typing import List
 
 router = APIRouter()
 
 
-class WorkflowBase(BaseModel):
-    """Base model for workflow data."""
-    name: str
-    description: Optional[str] = None
-
-
-class WorkflowCreate(WorkflowBase):
-    """Model for creating a workflow."""
-    pass
-
-
-class WorkflowRead(WorkflowBase):
-    """Model for reading a workflow."""
-    id: str
-    status: str
-    result: Optional[str] = None
-    created_at: str
-    updated_at: str
-
-    class Config:
-        from_attributes = True
-
-
-@router.get("/templates", response_model=List[dict])
-async def list_workflow_templates():
-    """List available workflow templates."""
-    return [
-        {
-            "id": "document-processing",
-            "name": "Document Processing",
-            "description": "Extract and analyze information from documents",
-            "steps": ["research", "process", "approve", "optimize"]
-        },
-        {
-            "id": "data-analysis",
-            "name": "Data Analysis",
-            "description": "Analyze datasets and generate insights",
-            "steps": ["research", "process", "approve", "optimize"]
-        }
-    ]
-
-
-@router.get("/", response_model=List[WorkflowRead])
+@router.get("/", response_model=List[WorkflowList])
 async def list_workflows():
     """List all workflows."""
-    workflows = await db.fetch_all("SELECT * FROM workflows")
-    return [WorkflowRead(**workflow) for workflow in workflows]
+    async with get_db() as db:
+        workflows = await db.fetch_all("SELECT * FROM workflows")
+        return [
+            {
+                "id": workflow["id"],
+                "name": workflow["name"],
+                "description": workflow["description"],
+                "status": workflow["status"],
+                "created_at": workflow["created_at"],
+                "updated_at": workflow["updated_at"]
+            }
+            for workflow in workflows
+        ]
 
 
-@router.get("/{workflow_id}", response_model=WorkflowRead)
+@router.get("/{workflow_id}", response_model=WorkflowDetail)
 async def get_workflow(workflow_id: str):
     """Get a specific workflow by ID."""
-    workflow = await db.fetch_one(
-        "SELECT * FROM workflows WHERE id = ?",
-        (workflow_id,)
-    )
-    if not workflow:
-        raise HTTPException(status_code=404, detail="Workflow not found")
-    return WorkflowRead(**workflow)
+    async with get_db() as db:
+        workflow = await db.fetch_one(
+            "SELECT * FROM workflows WHERE id = ?",
+            (workflow_id,)
+        )
+
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+
+        # Parse the result JSON if it exists
+        result = None
+        if workflow.get("result"):
+            try:
+                result = json.loads(workflow["result"])
+            except json.JSONDecodeError:
+                result = {"data": workflow["result"]}
+
+        return {
+            "id": workflow["id"],
+            "name": workflow["name"],
+            "description": workflow["description"],
+            "status": workflow["status"],
+            "result": result,
+            "error": workflow.get("error"),
+            "created_at": workflow["created_at"],
+            "updated_at": workflow["updated_at"]
+        }
+
+
+@router.delete("/{workflow_id}", status_code=204)
+async def delete_workflow(workflow_id: str):
+    """Delete a workflow by ID."""
+    async with get_db() as db:
+        # Check if workflow exists
+        workflow = await db.fetch_one(
+            "SELECT id FROM workflows WHERE id = ?",
+            (workflow_id,)
+        )
+
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+
+        # Delete the workflow
+        await db.execute(
+            "DELETE FROM workflows WHERE id = ?",
+            (workflow_id,)
+        )
+
+        return None

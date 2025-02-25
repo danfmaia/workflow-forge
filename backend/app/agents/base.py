@@ -1,48 +1,40 @@
-from typing import Dict, Any, Optional
-from langchain_core.messages import HumanMessage, AIMessage
-from langgraph.graph import StateGraph, Graph
-from pydantic import BaseModel
+"""Base agent module defining the Agent interface and common functionality."""
+
+from typing import Dict, Any
+from abc import ABC, abstractmethod
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-class AgentState(BaseModel):
-    """Represents the current state of an agent's workflow."""
-    messages: list[HumanMessage | AIMessage] = []
-    current_step: str = "start"
-    metadata: Dict[str, Any] = {}
-    error: Optional[str] = None
-
-
-class BaseAgent:
-    """Base class for all workflow agents."""
+class Agent(ABC):
+    """Base class for all agents in the system."""
 
     def __init__(self, name: str, description: str):
+        """Initialize the agent with a name and description.
+
+        Args:
+            name: The name of the agent
+            description: A description of the agent's role and capabilities
+        """
         self.name = name
         self.description = description
-        self._state = AgentState()
+        logger.info(f"Initialized agent: {name}")
 
-    async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Process input data and return results."""
-        raise NotImplementedError
+    @abstractmethod
+    async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """Process the current state and return an updated state.
 
-    def get_state(self) -> AgentState:
-        """Get current agent state."""
-        return self._state
+        This is the main method that must be implemented by all agents.
 
-    def update_state(self, new_state: Dict[str, Any]):
-        """Update agent state with new data."""
-        for key, value in new_state.items():
-            if hasattr(self._state, key):
-                setattr(self._state, key, value)
+        Args:
+            state: The current state dictionary
 
-    def reset(self):
-        """Reset agent state."""
-        self._state = AgentState()
+        Returns:
+            The updated state dictionary
+        """
+        pass
 
-    @property
-    def config(self) -> Dict[str, Any]:
-        """Get agent configuration."""
-        return {
-            "name": self.name,
-            "description": self.description,
-            "current_state": self._state.dict()
-        }
+    def __repr__(self) -> str:
+        """Return a string representation of the agent."""
+        return f"{self.__class__.__name__}(name='{self.name}')"

@@ -1,48 +1,79 @@
+from app.api import workflows, agents, execute, metrics
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
-from pydantic import BaseModel
-from typing import Dict, Any, List, Optional
-import uuid
-import json
-import psutil
 from contextlib import asynccontextmanager
+import logging
+import uuid
+import os
+import psutil
+import json
+from typing import List, Dict, Any, Optional
+from datetime import datetime
 
-from app.api import workflows, agents, execute, metrics
-from app.database import init_db, get_db
+from pydantic import BaseModel
+from app.database import init_db, get_db, db
 from app.workflow.orchestrator import WorkflowOrchestrator
+from app.config import config
+
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, config.logging.level),
+    format=config.logging.format
+)
+logger = logging.getLogger(__name__)
+
+# Import API routers
+
+# Lifespan context manager for startup/shutdown events
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan event handler for FastAPI app."""
-    # Initialize database on startup
+    """Handle startup and shutdown events for the application."""
+    # Log startup information
+    logger.info(
+        f"Starting WorkflowForge API in {config.environment} environment")
+
+    # Initialize the database
+    logger.info("Initializing database...")
     await init_db()
+
+    # Create healthcheck file to indicate the API is running
+    healthcheck_file = os.path.join(
+        os.path.dirname(__file__), '..', '.healthcheck')
+    with open(healthcheck_file, 'w') as f:
+        f.write(datetime.now().isoformat())
+
     yield
-    # Cleanup on shutdown (if needed)
+
+    # Cleanup on shutdown
+    logger.info("Shutting down WorkflowForge API")
+
+    # Remove healthcheck file
+    if os.path.exists(healthcheck_file):
+        os.remove(healthcheck_file)
 
 
-# Create FastAPI app
+# Create FastAPI application
 app = FastAPI(
     title="WorkflowForge API",
-    description="API for WorkflowForge, a business process automation platform using multi-agent orchestration",
+    description="Multi-agent workflow orchestration system",
     version="0.1.0",
     lifespan=lifespan,
+    debug=config.api.debug
 )
 
-# Configure CORS
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For development only, restrict in production
+    allow_origins=["*"],  # Update this for production!
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize workflow orchestrator
-orchestrator = WorkflowOrchestrator()
 
-
+# Define request and response models
 class WorkflowRequest(BaseModel):
     """Request model for workflow execution."""
     name: str
@@ -75,6 +106,7 @@ async def root():
         "name": "WorkflowForge API",
         "version": "0.1.0",
         "status": "operational",
+        "environment": config.environment,
         "docs_url": "/docs"
     }
 
@@ -90,92 +122,149 @@ async def list_workflows():
 @app.post("/workflows", response_model=WorkflowResponse, status_code=201)
 async def create_workflow(request: WorkflowRequest):
     """Create and execute a new workflow."""
+    # Generate a unique ID for the workflow
     workflow_id = str(uuid.uuid4())
 
+    # Log workflow creation
+    logger.info(f"Creating workflow {workflow_id}: {request.name}")
+
     try:
-        # Execute workflow
-        result = await orchestrator.execute_workflow(
-            workflow_id=workflow_id,
-            input_data=request.input_data
-        )
-
         # Store workflow in database
-        async with get_db() as db:
-            await db.execute(
-                """
-                INSERT INTO workflows (id, name, description, status, result)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    workflow_id,
-                    request.name,
-                    request.description,
-                    result["status"],
-                    str(result["result"])
-                )
-            )
-
-        return WorkflowResponse(
-            workflow_id=workflow_id,
-            name=request.name,
-            description=request.description,
-            status=result["status"],
-            result=result.get("result"),
-            error=result.get("error"),
-            history=result.get("history", [])
+        await db.execute(
+            """
+            INSERT INTO workflows 
+            (id, name, description, status, created_at, updated_at) 
+            VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+            """,
+            (workflow_id, request.name, request.description, "pending")
         )
+
+        # Execute the workflow
+        orchestrator = WorkflowOrchestrator(use_mock=config.workflow.use_mock)
+        result = await orchestrator.execute_workflow(workflow_id, request.input_data)
+
+        # Update workflow status in database
+        await db.execute(
+            """
+            UPDATE workflows 
+            SET status = ?, result = ?, updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            (result["status"], json.dumps(
+                result.get("result", {})), workflow_id)
+        )
+
+        # Return the workflow response
+        return {
+            "workflow_id": workflow_id,
+            "name": request.name,
+            "description": request.description,
+            "status": result["status"],
+            "result": result.get("result"),
+            "error": result.get("error"),
+            "history": result.get("history", [])
+        }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error creating workflow: {str(e)}")
+
+        # Update workflow status to error
+        await db.execute(
+            """
+            UPDATE workflows 
+            SET status = ?, error = ?, updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            ("error", str(e), workflow_id)
+        )
+
+        # Return error response
+        return {
+            "workflow_id": workflow_id,
+            "name": request.name,
+            "description": request.description,
+            "status": "error",
+            "result": None,
+            "error": str(e),
+            "history": []
+        }
 
 
 @app.get("/workflows/{workflow_id}", response_model=WorkflowResponse)
 async def get_workflow(workflow_id: str):
-    """Get workflow execution details."""
-    async with get_db() as db:
-        workflow = await db.fetch_one(
-            "SELECT * FROM workflows WHERE id = ?",
-            (workflow_id,)
-        )
+    """Get a specific workflow by ID."""
+    workflow = await db.fetch_one(
+        "SELECT * FROM workflows WHERE id = ?",
+        (workflow_id,)
+    )
 
-        if not workflow:
-            raise HTTPException(status_code=404, detail="Workflow not found")
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
 
-        return WorkflowResponse(
-            workflow_id=workflow["id"],
-            name=workflow["name"],
-            description=workflow["description"],
-            status=workflow["status"],
-            # Note: For demo only, not production safe
-            result=eval(workflow["result"]),
-            error=workflow.get("error"),
-            history=[]  # TODO: Implement history tracking
-        )
+    # Parse the result JSON if it exists
+    result = None
+    if workflow.get("result"):
+        try:
+            result = json.loads(workflow["result"])
+        except json.JSONDecodeError:
+            result = {"data": workflow["result"]}
+
+    return {
+        "workflow_id": workflow["id"],
+        "name": workflow["name"],
+        "description": workflow["description"],
+        "status": workflow["status"],
+        "result": result,
+        "error": workflow.get("error"),
+        "history": []  # We don't store history in the database yet
+    }
 
 
 @app.get("/metrics")
 async def get_metrics():
-    """Get system metrics and performance data."""
-    async with get_db() as db:
-        # Get workflow execution metrics from database
-        query = """
-        SELECT 
-            COUNT(*) as total_executions,
-            AVG(execution_time) as avg_execution_time
-        FROM workflow_executions
-        """
-        metrics = await db.fetch_one(query)
+    """Get overall system metrics."""
+    # Get workflow execution metrics
+    total_executions = await db.fetch_val(
+        "SELECT COUNT(*) FROM workflow_executions"
+    ) or 0
 
-        # Additional metrics could be calculated here
+    # Get average execution time
+    avg_execution_time = await db.fetch_val(
+        "SELECT AVG(execution_time) FROM workflow_executions"
+    ) or 0
 
-        return {
-            "total_executions": metrics["total_executions"] if metrics else 0,
-            "avg_execution_time": metrics["avg_execution_time"] if metrics else 0,
-            "system_stats": {
-                "memory_usage": psutil.virtual_memory().percent,
-                "cpu_usage": psutil.cpu_percent()
-            }
+    # Get system metrics
+    memory = psutil.virtual_memory()
+
+    return {
+        "total_executions": total_executions,
+        "avg_execution_time": round(float(avg_execution_time), 2),
+        "system_stats": {
+            "memory_usage": memory.percent,
+            "cpu_usage": psutil.cpu_percent(interval=0.1),
+            "timestamp": datetime.now().isoformat()
         }
+    }
 
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring."""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "environment": config.environment,
+        "database": "connected"  # Would add an actual check in production
+    }
+
+# Add this section to run the app with uvicorn if the file is executed directly
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    import uvicorn
+    logger.info(f"Starting server on {config.api.host}:{config.api.port}")
+    uvicorn.run(
+        "app.main:app",
+        host=config.api.host,
+        port=config.api.port,
+        reload=config.api.reload,
+        workers=config.api.workers
+    )

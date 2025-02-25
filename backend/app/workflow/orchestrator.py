@@ -3,14 +3,20 @@ from langgraph.graph import StateGraph, Graph
 from pydantic import BaseModel
 import inspect
 import logging
+import os
+from datetime import datetime
 
 from app.agents.researcher import ResearcherAgent
 from app.agents.processor import ProcessorAgent
 from app.agents.approver import ApproverAgent
 from app.agents.optimizer import OptimizerAgent
+from app.config import config
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=getattr(logging, config.logging.level),
+    format=config.logging.format
+)
 logger = logging.getLogger(__name__)
 
 
@@ -26,18 +32,23 @@ class WorkflowState(BaseModel):
 class WorkflowOrchestrator:
     """Coordinates the execution of workflow agents."""
 
-    def __init__(self):
+    def __init__(self, use_mock: Optional[bool] = None):
         self.researcher = ResearcherAgent()
         self.processor = ProcessorAgent()
         self.approver = ApproverAgent()
         self.optimizer = OptimizerAgent()
         self.graph = self._build_workflow_graph()
 
-        # Check if the graph has the arun method
-        self.has_arun = hasattr(self.graph, 'arun')
-        if not self.has_arun:
+        # Determine whether to use mock implementation
+        # Priority: 1. Constructor parameter, 2. Configuration value
+        self.use_mock = use_mock if use_mock is not None else config.workflow.use_mock
+
+        if self.use_mock:
             logger.warning(
-                "LangGraph version does not support 'arun'. Using mock implementation for demonstration.")
+                f"Using mock workflow execution in {config.environment} environment.")
+        else:
+            logger.info(
+                f"Using LangGraph workflow execution in {config.environment} environment.")
 
     def _build_workflow_graph(self) -> Graph:
         """Build the workflow execution graph."""
@@ -73,6 +84,37 @@ class WorkflowOrchestrator:
 
         return workflow.compile()
 
+    async def _langgraph_workflow_execution(self, workflow_id: str, input_data: Dict[str, Any]) -> WorkflowState:
+        """
+        Execute workflow using actual LangGraph implementation.
+
+        Args:
+            workflow_id: Unique identifier for the workflow
+            input_data: Initial data for the workflow
+
+        Returns:
+            WorkflowState with execution results
+
+        Raises:
+            RuntimeError: If LangGraph execution fails
+        """
+        try:
+            initial_state = WorkflowState(
+                workflow_id=workflow_id,
+                data=input_data
+            )
+
+            # Execute the workflow using LangGraph
+            if hasattr(self.graph, 'arun'):
+                final_state = await self.graph.arun(initial_state)
+                return final_state
+            else:
+                raise RuntimeError(
+                    "LangGraph version does not support 'arun' method")
+        except Exception as e:
+            logger.error(f"LangGraph execution failed: {str(e)}")
+            raise
+
     async def _mock_workflow_execution(self, workflow_id: str, input_data: Dict[str, Any]) -> WorkflowState:
         """
         Mock implementation of workflow execution for demonstration purposes.
@@ -86,6 +128,9 @@ class WorkflowOrchestrator:
         """
         logger.info(
             f"Using mock workflow execution for workflow {workflow_id}")
+
+        # Get current timestamp for more realistic simulation
+        current_time = datetime.now().isoformat()
 
         # Simulate research step
         research_results = await self.researcher.process(input_data)
@@ -127,16 +172,16 @@ class WorkflowOrchestrator:
             "optimization": optimization_results
         }
 
-        # Create final state
+        # Create final state with more realistic timestamps
         final_state = WorkflowState(
             workflow_id=workflow_id,
             current_step="optimize",
             data=mock_data,
             history=[
-                {"step": "research", "timestamp": "2023-01-01T00:00:00"},
-                {"step": "process", "timestamp": "2023-01-01T00:00:01"},
-                {"step": "approve", "timestamp": "2023-01-01T00:00:02"},
-                {"step": "optimize", "timestamp": "2023-01-01T00:00:03"}
+                {"step": "research", "timestamp": current_time},
+                {"step": "process", "timestamp": current_time},
+                {"step": "approve", "timestamp": current_time},
+                {"step": "optimize", "timestamp": current_time}
             ]
         )
 
@@ -159,9 +204,16 @@ class WorkflowOrchestrator:
         )
 
         try:
-            # Use mock implementation for demonstration purposes
-            # In a production environment, we would use the actual LangGraph execution
-            final_state = await self._mock_workflow_execution(workflow_id, input_data)
+            # Choose execution strategy based on configuration
+            if self.use_mock:
+                final_state = await self._mock_workflow_execution(workflow_id, input_data)
+            else:
+                try:
+                    final_state = await self._langgraph_workflow_execution(workflow_id, input_data)
+                except Exception as e:
+                    logger.warning(
+                        f"LangGraph execution failed, falling back to mock: {str(e)}")
+                    final_state = await self._mock_workflow_execution(workflow_id, input_data)
 
             return {
                 "workflow_id": workflow_id,

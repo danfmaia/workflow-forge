@@ -1,3 +1,5 @@
+"""Pydantic models for workflow data validation."""
+
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, List, Any
 from datetime import datetime
@@ -10,8 +12,11 @@ class WorkflowBase(BaseModel):
     is_active: bool = True
 
 
-class WorkflowCreate(WorkflowBase):
-    pass
+class WorkflowCreate(BaseModel):
+    """Model for creating a new workflow."""
+    name: str
+    description: str
+    input_data: Dict[str, Any]
 
 
 class WorkflowUpdate(BaseModel):
@@ -67,5 +72,45 @@ class WorkflowExecution(WorkflowExecutionInDB):
 
 
 class WorkflowList(BaseModel):
-    workflows: List[Workflow]
-    count: int
+    """Model for listing workflows."""
+    id: str
+    name: str
+    description: str
+    status: str
+    created_at: str
+    updated_at: str
+
+    model_config = {"from_attributes": True}
+
+
+class WorkflowResponse(BaseModel):
+    """Response model for workflow execution."""
+    workflow_id: str
+    name: str
+    description: str
+    status: str
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    history: List[Dict[str, Any]] = []
+
+
+class WorkflowDetail(BaseModel):
+    """Detailed workflow model."""
+    id: str
+    name: str
+    description: str
+    status: str
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+    model_config = {"from_attributes": True}
+
+
+class WorkflowTemplate(BaseModel):
+    """Model for workflow templates."""
+    id: str
+    name: str
+    description: str
+    steps: List[str]
