@@ -1,4 +1,5 @@
 from app.api import workflows, agents, execute, metrics
+from app.auth import api as auth_api
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -63,13 +64,32 @@ app = FastAPI(
     debug=config.api.debug
 )
 
-# Add CORS middleware
+# Define allowed origins based on environment
+allowed_origins = ["*"]  # Default for development
+if config.environment == "production":
+    # In production, specify exact allowed origins
+    allowed_origins = [
+        "https://workflowforge.com",
+        "https://app.workflowforge.com",
+        "https://api.workflowforge.com"
+    ]
+elif config.environment == "staging":
+    allowed_origins = [
+        "https://staging.workflowforge.com",
+        "https://staging-app.workflowforge.com"
+    ]
+
+# Add CORS middleware with proper configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Update this for production!
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE",
+                   "OPTIONS"] if config.environment == "production" else ["*"],
+    allow_headers=["Authorization",
+                   "Content-Type"] if config.environment == "production" else ["*"],
+    # 24 hours in production, 10 minutes in dev
+    max_age=86400 if config.environment == "production" else 600,
 )
 
 
@@ -97,6 +117,7 @@ app.include_router(workflows.router, prefix="/workflows", tags=["workflows"])
 app.include_router(agents.router, prefix="/agents", tags=["agents"])
 app.include_router(execute.router, prefix="/execute", tags=["execute"])
 app.include_router(metrics.router, prefix="/metrics", tags=["metrics"])
+app.include_router(auth_api.router, prefix="/auth", tags=["auth"])
 
 
 @app.get("/")

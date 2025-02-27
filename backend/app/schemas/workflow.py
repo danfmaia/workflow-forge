@@ -31,8 +31,7 @@ class WorkflowInDB(WorkflowBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 
 class Workflow(WorkflowInDB):
@@ -63,8 +62,7 @@ class WorkflowExecutionInDB(WorkflowExecutionBase):
     output_data: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 
 class WorkflowExecution(WorkflowExecutionInDB):
