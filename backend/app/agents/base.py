@@ -1,6 +1,6 @@
 """Base agent module defining the Agent interface and common functionality."""
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from abc import ABC, abstractmethod
 import logging
 from dataclasses import dataclass

@@ -40,13 +40,13 @@ def test_authenticate_user_valid():
 def test_authenticate_user_invalid_password():
     """Test user authentication with invalid password."""
     user = authenticate_user(fake_users_db, "testuser", "wrongpassword")
-    assert user is False
+    assert user is None
 
 
 def test_authenticate_user_invalid_username():
     """Test user authentication with invalid username."""
     user = authenticate_user(fake_users_db, "nonexistentuser", "testpassword")
-    assert user is False
+    assert user is None
 
 
 def test_create_access_token():

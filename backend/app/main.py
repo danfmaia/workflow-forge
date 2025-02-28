@@ -1,20 +1,26 @@
-from app.api import workflows, agents, execute, metrics
-from app.auth import api as auth_api
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 import logging
 import uuid
 import os
 import psutil
 import json
+import time
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from contextlib import asynccontextmanager
 
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+# First import config to avoid circular imports
+from app.config import config
+
+# Then import other modules that might depend on config
 from app.database import init_db, get_db, db
 from app.workflow.orchestrator import WorkflowOrchestrator
-from app.config import config
+from app.api import workflows, agents, execute, metrics
+from app.auth import api as auth_api
 
 # Configure logging
 logging.basicConfig(
@@ -64,33 +70,83 @@ app = FastAPI(
     debug=config.api.debug
 )
 
-# Define allowed origins based on environment
-allowed_origins = ["*"]  # Default for development
-if config.environment == "production":
-    # In production, specify exact allowed origins
-    allowed_origins = [
-        "https://workflowforge.com",
-        "https://app.workflowforge.com",
-        "https://api.workflowforge.com"
-    ]
-elif config.environment == "staging":
-    allowed_origins = [
-        "https://staging.workflowforge.com",
-        "https://staging-app.workflowforge.com"
-    ]
-
-# Add CORS middleware with proper configuration
+# Add CORS middleware with configuration from config
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE",
-                   "OPTIONS"] if config.environment == "production" else ["*"],
-    allow_headers=["Authorization",
-                   "Content-Type"] if config.environment == "production" else ["*"],
-    # 24 hours in production, 10 minutes in dev
-    max_age=86400 if config.environment == "production" else 600,
+    allow_origins=config.cors.allowed_origins,
+    allow_credentials=config.cors.allow_credentials,
+    allow_methods=config.cors.allow_methods,
+    allow_headers=config.cors.allow_headers,
+    max_age=config.cors.max_age,
 )
+
+# Log CORS configuration
+logger.info(
+    f"CORS configuration: allowed origins = {config.cors.allowed_origins}")
+
+# Rate limiting middleware
+if config.rate_limit.enabled:
+    class RateLimitMiddleware:
+        def __init__(
+            self,
+            app,
+            calls_per_minute: int = 60,
+            window_size: int = 60
+        ):
+            self.app = app
+            self.calls_per_minute = calls_per_minute
+            self.window_size = window_size  # Window size in seconds
+            self.request_counts = {}
+            logger.info(
+                f"Rate limiting enabled: {calls_per_minute} requests per minute")
+
+        async def __call__(self, request: Request, call_next):
+            # Get client IP
+            client_ip = request.client.host
+            current_time = time.time()
+
+            # Clean up old entries
+            self._cleanup_old_requests(current_time)
+
+            # Check if rate limit exceeded
+            if self._is_rate_limited(client_ip, current_time):
+                logger.warning(f"Rate limit exceeded for IP: {client_ip}")
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "detail": "Rate limit exceeded. Please try again later."}
+                )
+
+            # Process the request
+            return await call_next(request)
+
+        def _cleanup_old_requests(self, current_time: float):
+            """Remove requests older than the window size."""
+            cutoff_time = current_time - self.window_size
+            for ip in list(self.request_counts.keys()):
+                self.request_counts[ip] = [
+                    timestamp for timestamp in self.request_counts[ip]
+                    if timestamp > cutoff_time
+                ]
+                if not self.request_counts[ip]:
+                    del self.request_counts[ip]
+
+        def _is_rate_limited(self, client_ip: str, current_time: float) -> bool:
+            """Check if the client IP has exceeded the rate limit."""
+            if client_ip not in self.request_counts:
+                self.request_counts[client_ip] = []
+
+            self.request_counts[client_ip].append(current_time)
+
+            # Check if rate limit exceeded
+            return len(self.request_counts[client_ip]) > self.calls_per_minute
+
+    # Add rate limiting middleware
+    app.add_middleware(
+        RateLimitMiddleware,
+        calls_per_minute=config.rate_limit.per_minute,
+        window_size=config.rate_limit.window_size
+    )
 
 
 # Define request and response models

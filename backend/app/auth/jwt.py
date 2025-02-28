@@ -1,7 +1,10 @@
 """JWT authentication module for WorkflowForge."""
 
+from app.config import config
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, Union
+from typing import Any, Dict, Optional
+import sys
+from pathlib import Path
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -9,7 +12,10 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 
-from app.config import config
+# Add the parent directory to sys.path to ensure imports work correctly
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+# Import config directly
 
 # Security constants
 SECRET_KEY = config.secret_key
@@ -84,13 +90,13 @@ def get_user(db, username: str) -> Optional[UserInDB]:
     return None
 
 
-def authenticate_user(fake_db, username: str, password: str) -> Union[User, bool]:
+def authenticate_user(fake_db, username: str, password: str) -> Optional[UserInDB]:
     """Authenticate a user."""
     user = get_user(fake_db, username)
     if not user:
-        return False
+        return None
     if not verify_password(password, user.hashed_password):
-        return False
+        return None
     return user
 
 

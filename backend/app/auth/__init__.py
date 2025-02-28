@@ -1,9 +1,6 @@
-"""Authentication module for WorkflowForge."""
+"""Authentication module for the application."""
 
-from app.auth.jwt import (
-    create_access_token,
-    verify_token,
-    get_current_user,
-    get_current_active_user,
-    User
-)
+# This file intentionally left empty to mark the directory as a Python package
+
+# Import only what's needed by other modules
+from app.auth.jwt import authenticate_user, get_password_hash, verify_password

@@ -42,8 +42,8 @@ def test_login_for_access_token_valid(mock_authenticate_user):
 @patch("app.auth.api.authenticate_user")
 def test_login_for_access_token_invalid(mock_authenticate_user):
     """Test login with invalid credentials."""
-    # Mock the authenticate_user function to return False (invalid credentials)
-    mock_authenticate_user.return_value = False
+    # Mock the authenticate_user function to return None (invalid credentials)
+    mock_authenticate_user.return_value = None
 
     # Send a login request
     response = client.post(
