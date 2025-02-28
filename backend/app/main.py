@@ -117,7 +117,7 @@ app.include_router(workflows.router, prefix="/workflows", tags=["workflows"])
 app.include_router(agents.router, prefix="/agents", tags=["agents"])
 app.include_router(execute.router, prefix="/execute", tags=["execute"])
 app.include_router(metrics.router, prefix="/metrics", tags=["metrics"])
-app.include_router(auth_api.router, prefix="/auth", tags=["auth"])
+app.include_router(auth_api.router)
 
 
 @app.get("/")

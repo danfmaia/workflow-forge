@@ -16,7 +16,11 @@ from app.auth.jwt import (
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/auth",
+    tags=["authentication"],
+    responses={401: {"description": "Unauthorized"}},
+)
 
 
 @router.post("/token", response_model=Token)
