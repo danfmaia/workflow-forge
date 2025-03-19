@@ -1,5 +1,7 @@
 # WorkflowForge
 
+![WorkflowForge - Business Process Automation Platform](docs/images/project-cover.jpeg)
+
 A business process automation platform that uses multi-agent orchestration to automate complex workflows. The platform includes a marketplace of pre-built workflows that can be customized, a self-improvement mechanism, and a modern React dashboard for configuration and monitoring.
 
 ## Quick Start
