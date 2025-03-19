@@ -1,11 +1,29 @@
 from app.database.connection import engine
 from app.database.models import Base, Workflow, Agent
 import json
+import subprocess
+import os
+import sys
 
 
 def init_db():
-    # Create all tables
-    Base.metadata.create_all(bind=engine)
+    """
+    Initialize the database with required tables and seed data.
+
+    This function now uses Alembic to run migrations instead of creating tables directly.
+    It then seeds the database with initial data if it's empty.
+    """
+    # Run Alembic migrations to ensure schema is up to date
+    backend_dir = os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))))
+    alembic_cmd = ["alembic", "upgrade", "head"]
+
+    try:
+        subprocess.run(alembic_cmd, cwd=backend_dir, check=True)
+        print("Database migrations applied successfully.")
+    except subprocess.CalledProcessError as e:
+        print(f"Error applying migrations: {e}")
+        sys.exit(1)
 
     # Import session here to avoid circular imports
     from app.database.connection import SessionLocal
@@ -93,6 +111,9 @@ def init_db():
         db.add(optimizer)
 
         db.commit()
+        print("Database seeded with initial data.")
+    else:
+        print("Database already contains data, skipping seed.")
 
     db.close()
 

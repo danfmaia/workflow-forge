@@ -25,3 +25,4 @@ dependencies:
       - psutil==5.9.5
       - python-jose[cryptography]==3.3.0
       - passlib[bcrypt]==1.7.4
+      - alembic==1.13.1

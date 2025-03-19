@@ -49,6 +49,11 @@ backend/logs/
 data/
 backend/data/
 
+# Database migrations
+backend/migrations/
+backend/alembic.ini
+backend/scripts/
+
 # Testing
 .coverage
 htmlcov/
