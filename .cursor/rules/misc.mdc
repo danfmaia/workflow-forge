@@ -1,0 +1,14 @@
+---
+description: Miscellaneous rules for all agents
+globs: 
+---
+
+# Miscellaneous Rules
+
+- Always favor TDD practices.
+- Leave Git responsabilities to the user, unless explicitly solicited to perform Git operations.
+- Always leave Git remote commands (such as `git push`) with the user.
+- Always use Conventional Commits standards for commit messages.
+- Use Git commands for diff checking if necessary.
+- Never (or avoid the most as possible) leave the terminal in interactive mode – Use suffix ` | cat` when needed.
+- Use the fewest commands as possible when applying Git operations.
